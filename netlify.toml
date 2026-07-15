@@ -1,0 +1,14 @@
+[build]
+  base = "splitsecond"
+  command = "npm run build"
+  publish = "www"
+
+[build.environment]
+  NODE_VERSION = "20"
+
+# Angular uses path-based routing (no hash), so any deep link / refresh (e.g. /tabs/timing/<id>)
+# has to fall back to index.html and let the Angular router take over client-side.
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
