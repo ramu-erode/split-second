@@ -1,0 +1,18 @@
+.heat-clock {
+  text-align: center;
+  margin-bottom: 16px;
+}
+
+.elapsed {
+  font-size: 3.25rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  margin: 0 0 12px;
+}
+
+.controls ion-button {
+  margin: 0 auto;
+  max-width: 20rem;
+  --padding-top: 18px;
+  --padding-bottom: 18px;
+}

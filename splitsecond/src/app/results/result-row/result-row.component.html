@@ -1,0 +1,31 @@
+<div class="result-row" [class.mine]="result().isMyTeam">
+  <div class="place">#{{ result().place }}</div>
+  <div class="who">
+    <p class="name">{{ result().swimmerName ?? result().teamName }}</p>
+    <p class="team">
+      {{ result().teamName }}
+      @if (result().isMyTeam) {
+        <ion-badge color="primary">My team</ion-badge>
+      }
+    </p>
+  </div>
+  <div class="times">
+    <span class="final">{{ formatTime(result().timeMs) }}</span>
+    @if (result().seedTimeMs !== null) {
+      <span class="seed">Seed {{ formatTime(result().seedTimeMs) }}</span>
+      <span class="delta" [class.faster]="(result().deltaMs ?? 0) < 0">
+        {{ formatDelta(result().deltaMs) }}
+      </span>
+    }
+    <span class="points">{{ result().points }} pts</span>
+  </div>
+  @if (result().splits.length) {
+    <div class="splits">
+      @for (s of result().splits; track $index) {
+        <ion-chip color="light">
+          <ion-label>{{ formatTime(s) }}</ion-label>
+        </ion-chip>
+      }
+    </div>
+  }
+</div>

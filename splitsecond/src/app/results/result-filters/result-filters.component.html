@@ -1,0 +1,40 @@
+<div class="filters">
+  <ion-select
+    label="Team"
+    placeholder="All teams"
+    interface="popover"
+    [value]="selectedTeamId()"
+    (ionChange)="teamIdChanged.emit($event.detail.value)"
+  >
+    <ion-select-option [value]="null">All teams</ion-select-option>
+    @for (team of teams(); track team.id) {
+      <ion-select-option [value]="team.id">{{ team.name }}</ion-select-option>
+    }
+  </ion-select>
+
+  <ion-select
+    label="Group"
+    placeholder="All groups"
+    interface="popover"
+    [value]="selectedAgeGroup()"
+    (ionChange)="ageGroupChanged.emit($event.detail.value)"
+  >
+    <ion-select-option [value]="null">All groups</ion-select-option>
+    @for (group of ageGroups(); track group) {
+      <ion-select-option [value]="group">{{ group }}</ion-select-option>
+    }
+  </ion-select>
+
+  <ion-select
+    label="Gender"
+    placeholder="All genders"
+    interface="popover"
+    [value]="selectedGender()"
+    (ionChange)="genderChanged.emit($event.detail.value)"
+  >
+    <ion-select-option [value]="null">All genders</ion-select-option>
+    @for (gender of genders(); track gender) {
+      <ion-select-option [value]="gender">{{ gender }}</ion-select-option>
+    }
+  </ion-select>
+</div>

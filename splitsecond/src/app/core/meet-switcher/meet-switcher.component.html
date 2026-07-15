@@ -1,0 +1,10 @@
+<ion-button fill="clear" size="small" (click)="open()">
+  <ion-icon slot="start" name="swap-horizontal-outline" />
+  {{ currentMeetName() }}
+</ion-button>
+<ion-action-sheet
+  [isOpen]="isOpen()"
+  header="Switch meet"
+  [buttons]="buttons()"
+  (didDismiss)="isOpen.set(false)"
+/>

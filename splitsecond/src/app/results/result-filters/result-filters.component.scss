@@ -1,0 +1,14 @@
+.filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+
+  ion-select {
+    flex: 1 1 140px;
+    --padding-start: 10px;
+    --padding-end: 10px;
+    background: var(--ion-color-light);
+    border-radius: 8px;
+  }
+}

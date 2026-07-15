@@ -1,0 +1,21 @@
+<ion-card button [class.completed]="heat().status === 'completed'" (click)="heatSelected.emit(heat().id)">
+  <ion-card-header>
+    <ion-badge [color]="statusColor()">{{ statusLabel() }}</ion-badge>
+    <ion-card-title>Event {{ heat().eventNo }} — {{ heat().eventTitle }}</ion-card-title>
+    @if (heat().heatNo) {
+      <p>Heat {{ heat().heatNo }}</p>
+    }
+  </ion-card-header>
+  <ion-card-content>
+    @for (lane of heat().lanes; track lane.laneNo) {
+      <ion-chip [outline]="!lane.isMyTeam" [color]="lane.isMyTeam ? 'primary' : 'medium'">
+        <ion-label>
+          {{ lane.laneNo }}. {{ lane.swimmerName || lane.teamName || '—' }}
+          @if (lane.seedTimeMs !== null) {
+            <span class="seed-time">{{ formatTime(lane.seedTimeMs) }}</span>
+          }
+        </ion-label>
+      </ion-chip>
+    }
+  </ion-card-content>
+</ion-card>

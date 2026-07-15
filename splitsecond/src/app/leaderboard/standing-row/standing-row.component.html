@@ -1,0 +1,15 @@
+<ion-item [class.mine]="standing().isMyTeam">
+  <ion-label slot="start" class="rank">#{{ rank() }}</ion-label>
+  <ion-label>
+    {{ standing().teamName }}
+    @if (standing().isMyTeam) {
+      <ion-badge color="primary">My team</ion-badge>
+    }
+  </ion-label>
+  <div slot="end" class="points">
+    <span class="value">{{ standing().points }} pts</span>
+    @if (standing().isProvisional) {
+      <ion-badge color="warning">Live</ion-badge>
+    }
+  </div>
+</ion-item>

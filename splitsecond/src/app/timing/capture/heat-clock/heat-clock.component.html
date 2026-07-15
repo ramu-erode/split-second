@@ -1,0 +1,16 @@
+<div class="heat-clock">
+  <p class="elapsed">{{ elapsedDisplay() }}</p>
+  <div class="controls">
+    @if (!running()) {
+      <ion-button expand="block" size="large" color="success" (click)="startAll.emit()">
+        <ion-icon slot="start" name="play-outline" />
+        Start All
+      </ion-button>
+    } @else {
+      <ion-button expand="block" size="large" color="danger" (click)="stopAll.emit()">
+        <ion-icon slot="start" name="stop-outline" />
+        Stop All
+      </ion-button>
+    }
+  </div>
+</div>

@@ -1,0 +1,13 @@
+<ion-card>
+  <ion-card-header>
+    <ion-card-title>Event {{ event().eventNo }} — {{ event().eventTitle }}</ion-card-title>
+    @if (event().isProvisional) {
+      <ion-badge color="warning">Live — still finishing</ion-badge>
+    }
+  </ion-card-header>
+  <ion-card-content>
+    @for (result of event().results; track result.physicalLaneId) {
+      <app-result-row [result]="result" />
+    }
+  </ion-card-content>
+</ion-card>

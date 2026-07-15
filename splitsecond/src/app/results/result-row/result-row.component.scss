@@ -1,0 +1,75 @@
+.result-row {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 4px 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--ion-color-light-shade);
+
+  &.mine {
+    background: var(--ion-color-light);
+  }
+
+  &:last-child {
+    border-bottom: none;
+  }
+}
+
+.place {
+  font-weight: 700;
+  font-size: 1.1rem;
+  min-width: 2rem;
+}
+
+.who {
+  .name {
+    margin: 0;
+    font-weight: 600;
+  }
+
+  .team {
+    margin: 0;
+    font-size: 0.85rem;
+    color: var(--ion-color-medium);
+  }
+}
+
+.times {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  font-variant-numeric: tabular-nums;
+
+  .final {
+    font-weight: 700;
+  }
+
+  .seed {
+    font-size: 0.8rem;
+    color: var(--ion-color-medium);
+  }
+
+  .delta {
+    font-size: 0.8rem;
+    color: var(--ion-color-danger);
+
+    &.faster {
+      color: var(--ion-color-success);
+    }
+  }
+
+  .points {
+    font-size: 0.8rem;
+    color: var(--ion-color-medium);
+  }
+}
+
+.splits {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+
+  ion-chip {
+    margin-inline-end: 4px;
+  }
+}

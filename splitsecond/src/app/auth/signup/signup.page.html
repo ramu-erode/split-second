@@ -1,0 +1,37 @@
+<ion-header>
+  <ion-toolbar>
+    <ion-title>Sign up</ion-title>
+  </ion-toolbar>
+</ion-header>
+<ion-content class="ion-padding">
+  <ion-item>
+    <ion-input
+      label="Name"
+      [value]="displayName()"
+      (ionInput)="displayName.set($event.detail.value ?? '')"
+    />
+  </ion-item>
+  <ion-item>
+    <ion-input
+      label="Email"
+      type="email"
+      [value]="email()"
+      (ionInput)="email.set($event.detail.value ?? '')"
+    />
+  </ion-item>
+  <ion-item>
+    <ion-input
+      label="Password"
+      type="password"
+      [value]="password()"
+      (ionInput)="password.set($event.detail.value ?? '')"
+    />
+  </ion-item>
+  @if (error()) {
+    <ion-text color="danger">
+      <p>{{ error() }}</p>
+    </ion-text>
+  }
+  <ion-button expand="block" [disabled]="submitting()" (click)="submit()">Sign up</ion-button>
+  <ion-button expand="block" fill="clear" routerLink="/login">Already have an account? Log in</ion-button>
+</ion-content>

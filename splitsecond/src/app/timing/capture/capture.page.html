@@ -1,0 +1,53 @@
+<ion-header>
+  <ion-toolbar>
+    <ion-buttons slot="start">
+      <ion-back-button defaultHref="/tabs/timing"></ion-back-button>
+    </ion-buttons>
+    <ion-title>{{ heatTitle() }}</ion-title>
+  </ion-toolbar>
+</ion-header>
+<ion-content class="ion-padding">
+  @if (status() === 'loading') {
+    <p>Loading…</p>
+  } @else if (lanes().length === 0) {
+    <p>No lanes found for this heat.</p>
+  } @else {
+    <div class="heat-status-row">
+      <ion-badge [color]="heatStatusColor()">{{ heatStatusLabel() }}</ion-badge>
+      @if (canScore()) {
+        @if (heatStatus() !== 'completed') {
+          <ion-button size="small" fill="outline" (click)="markHeatComplete()">Mark heat complete</ion-button>
+        } @else {
+          <ion-button size="small" fill="outline" (click)="reopenHeat()">Reopen heat</ion-button>
+        }
+      }
+    </div>
+
+    <app-heat-clock
+      [running]="heatRunning()"
+      [elapsedMs]="heatElapsedMs()"
+      (startAll)="startAll()"
+      (stopAll)="stopAll()"
+    />
+
+    @for (lane of lanes(); track lane.laneId) {
+      <app-lane-row
+        [lane]="lane"
+        [captureEnabled]="captureEnabled()"
+        (lapTapped)="lap(lane.laneId)"
+        (finishTapped)="finish(lane.laneId)"
+        (undoTapped)="undo(lane.laneId)"
+        (selectToggled)="toggleSelected(lane.laneId)"
+        (manualFinishTapped)="finishManual(lane.laneId, $event)"
+      />
+    }
+  }
+</ion-content>
+
+@if (selectedCount() > 0) {
+  <ion-footer class="ion-padding">
+    <ion-button expand="block" size="large" color="success" (click)="finishSelected()">
+      Finish {{ selectedCount() }} selected
+    </ion-button>
+  </ion-footer>
+}

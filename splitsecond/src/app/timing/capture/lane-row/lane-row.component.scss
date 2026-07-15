@@ -1,0 +1,100 @@
+:host {
+  display: block;
+  margin-bottom: 12px;
+}
+
+ion-card.mine {
+  border-inline-start: 4px solid var(--ion-color-primary);
+}
+
+ion-card.finished {
+  opacity: 0.85;
+}
+
+.header-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+
+  ion-card-title {
+    flex: 1;
+  }
+
+  ion-checkbox {
+    flex: 0 0 auto;
+  }
+}
+
+.latest-time {
+  flex: 0 0 auto;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--ion-color-success);
+
+  &.finished {
+    color: var(--ion-color-medium);
+  }
+}
+
+.seed-time {
+  margin-inline-start: 6px;
+  color: var(--ion-color-medium);
+  font-variant-numeric: tabular-nums;
+}
+
+.relay-note {
+  color: var(--ion-color-medium);
+  font-size: 0.85rem;
+}
+
+.recorded-times {
+  margin-bottom: 12px;
+
+  ion-chip {
+    margin-inline-end: 4px;
+  }
+}
+
+.controls {
+  display: flex;
+  align-items: stretch;
+  gap: 8px;
+
+  ion-button {
+    margin: 0;
+    --padding-top: 16px;
+    --padding-bottom: 16px;
+  }
+
+  ion-button:first-child {
+    flex: 1;
+  }
+}
+
+.splits {
+  display: flex;
+  flex-wrap: wrap;
+  margin-top: 8px;
+}
+
+.manual-preview {
+  text-align: center;
+  font-size: 2.25rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  margin-bottom: 12px;
+}
+
+.keypad {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin-bottom: 12px;
+
+  ion-button {
+    margin: 0;
+    --padding-top: 20px;
+    --padding-bottom: 20px;
+    font-size: 1.25rem;
+  }
+}

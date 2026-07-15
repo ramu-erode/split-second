@@ -1,0 +1,69 @@
+<ion-header>
+  <ion-toolbar>
+    <ion-title>{{ meet()?.name ?? 'Upcoming' }}</ion-title>
+    @if (availableMeets().length > 1) {
+      <ion-buttons slot="end">
+        <app-meet-switcher
+          [meets]="availableMeets()"
+          [selectedMeetId]="meet()?.id ?? null"
+          (meetSelected)="onMeetSelected($event)"
+        />
+      </ion-buttons>
+    }
+  </ion-toolbar>
+</ion-header>
+<ion-content class="ion-padding">
+  <ion-refresher slot="fixed" (ionRefresh)="refresh($event)">
+    <ion-refresher-content></ion-refresher-content>
+  </ion-refresher>
+
+  @if (status() === 'loading') {
+    <p>Loading…</p>
+  } @else if (status() === 'error') {
+    <p>Couldn't load the meet. Pull to refresh to try again.</p>
+  } @else if (!meet()) {
+    <p>No published meet found.</p>
+  } @else {
+    <ion-searchbar
+      [value]="searchText()"
+      (ionInput)="onSearchInput($event.detail.value)"
+      placeholder="Search event, swimmer, or team"
+      debounce="150"
+    ></ion-searchbar>
+
+    @if (searchResults(); as results) {
+      <h2>Search results</h2>
+      @if (results.length === 0) {
+        <p>No heats match "{{ searchText() }}".</p>
+      }
+      @for (heat of results; track heat.id) {
+        <app-heat-card [heat]="heat" (heatSelected)="onHeatSelected($event)" />
+      }
+    } @else {
+      <h2>Your team is up</h2>
+      @if (myTeamHeats().length === 0) {
+        <p>No upcoming heats with your swimmers.</p>
+      }
+      @for (heat of myTeamHeats(); track heat.id) {
+        <app-heat-card [heat]="heat" (heatSelected)="onHeatSelected($event)" />
+      }
+
+      <h2>Coming up</h2>
+      @for (heat of comingUpHeats(); track heat.id) {
+        <app-heat-card [heat]="heat" (heatSelected)="onHeatSelected($event)" />
+      }
+
+      @if (completedHeats().length > 0) {
+        <ion-button fill="clear" size="small" (click)="toggleShowCompleted()">
+          {{ showCompleted() ? 'Hide' : 'Show' }} completed ({{ completedHeats().length }})
+        </ion-button>
+        @if (showCompleted()) {
+          <h2>Completed</h2>
+          @for (heat of completedHeats(); track heat.id) {
+            <app-heat-card [heat]="heat" (heatSelected)="onHeatSelected($event)" />
+          }
+        }
+      }
+    }
+  }
+</ion-content>

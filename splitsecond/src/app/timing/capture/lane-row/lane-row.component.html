@@ -1,0 +1,113 @@
+<ion-card [class.mine]="lane().isMyTeam" [class.finished]="lane().isFinished">
+  <ion-card-header>
+    <div class="header-row">
+      @if (!lane().isFinished && captureEnabled()) {
+        <ion-checkbox
+          aria-label="Select for bulk finish"
+          [checked]="lane().isSelected"
+          (ionChange)="selectToggled.emit()"
+        />
+      }
+      <ion-card-title>
+        Lane {{ lane().laneNo }}
+        @if (lane().isMyTeam) {
+          <ion-badge color="primary">My team</ion-badge>
+        }
+        @if (lane().status !== 'seeded') {
+          <ion-badge color="medium">{{ lane().status }}</ion-badge>
+        }
+      </ion-card-title>
+      <span class="latest-time" [class.finished]="lane().isFinished">
+        {{ latestTimeMs() !== null ? formatTime(latestTimeMs()) : (captureEnabled() ? 'Running' : '—') }}
+      </span>
+    </div>
+    <p>
+      @if (lane().swimmerName) {
+        {{ lane().swimmerName }} — {{ lane().teamName ?? 'Unknown team' }}
+      } @else if (lane().teamName) {
+        {{ lane().teamName }} <span class="relay-note">(relay — no individual swimmer)</span>
+      } @else {
+        Unassigned
+      }
+      @if (lane().seedTimeMs !== null) {
+        <span class="seed-time">Seed {{ formatTime(lane().seedTimeMs) }}</span>
+      }
+    </p>
+  </ion-card-header>
+
+  <ion-card-content>
+    @if (lane().observations.length) {
+      <div class="recorded-times">
+        @for (obs of lane().observations; track obs.id) {
+          <ion-chip [color]="obs.isMine ? 'primary' : 'medium'" [outline]="!obs.isMine">
+            <ion-label>
+              {{ formatTime(obs.finalTimeMs) }} · {{ obs.source }}{{ obs.isMine ? ' · you' : '' }}
+            </ion-label>
+          </ion-chip>
+        }
+      </div>
+    }
+
+    @if (!manualMode()) {
+      @if (lane().isFinished) {
+        <div class="controls">
+          <ion-button expand="block" size="large" fill="outline" disabled>Finished</ion-button>
+          <ion-button size="large" fill="clear" (click)="undoTapped.emit()">
+            <ion-icon slot="icon-only" name="refresh-outline" />
+          </ion-button>
+        </div>
+      } @else {
+        <div class="controls">
+          <ion-button
+            expand="block"
+            size="large"
+            color="success"
+            [disabled]="!captureEnabled()"
+            (click)="lapTapped.emit()"
+          >
+            <ion-icon slot="start" name="flag-outline" />
+            Split
+          </ion-button>
+          <ion-button
+            size="large"
+            fill="outline"
+            [disabled]="!captureEnabled()"
+            (click)="finishTapped.emit()"
+          >
+            <ion-icon slot="icon-only" name="checkmark-outline" />
+          </ion-button>
+        </div>
+        @if (lane().splits.length) {
+          <div class="splits">
+            @for (s of lane().splits; track $index) {
+              <ion-chip color="light">
+                <ion-label>{{ formatTime(s) }}</ion-label>
+              </ion-chip>
+            }
+          </div>
+        }
+        <ion-button fill="clear" size="small" (click)="toggleManualMode()">
+          Enter time manually
+        </ion-button>
+      }
+    } @else {
+      <div class="manual-entry">
+        <div class="manual-preview">{{ manualPreview() }}</div>
+        <div class="keypad">
+          @for (digit of ['1', '2', '3', '4', '5', '6', '7', '8', '9']; track digit) {
+            <ion-button fill="outline" size="large" (click)="appendDigit(digit)">{{ digit }}</ion-button>
+          }
+          <ion-button fill="outline" size="large" (click)="clearDigits()">C</ion-button>
+          <ion-button fill="outline" size="large" (click)="appendDigit('0')">0</ion-button>
+          <ion-button fill="outline" size="large" (click)="backspaceDigit()">
+            <ion-icon slot="icon-only" name="backspace-outline" />
+          </ion-button>
+        </div>
+        <ion-button expand="block" size="large" [disabled]="!manualDigits()" (click)="saveManualTime()">
+          Save
+        </ion-button>
+        <ion-button fill="clear" size="small" (click)="toggleManualMode()">Cancel</ion-button>
+      </div>
+    }
+  </ion-card-content>
+</ion-card>

@@ -1,0 +1,20 @@
+ion-item.mine {
+  --background: var(--ion-color-primary-tint);
+}
+
+.rank {
+  flex: 0 0 auto;
+  font-weight: 700;
+  min-width: 2.5rem;
+}
+
+.points {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+
+  .value {
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+  }
+}
