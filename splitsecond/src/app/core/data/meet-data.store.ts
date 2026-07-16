@@ -246,7 +246,7 @@ export class MeetDataStore {
     this._syncError.set(null);
     try {
       await this.syncProgramData(meetId);
-      await this.syncLiveData(meetId);
+      await this.fullResyncLiveData(meetId);
     } catch (e) {
       this._syncError.set(e instanceof Error ? e.message : 'Refresh failed');
     } finally {
@@ -567,6 +567,35 @@ export class MeetDataStore {
     if (latest !== since) await this.updateSyncMeta(meetId, { liveDataSyncedAt: latest });
   }
 
+  // Hard-refresh only. syncLiveData's `since` merge only ever adds/updates rows, so it can never
+  // notice a server-side deletion (e.g. wiping test observations before a meet goes live) — the
+  // stale rows just stay cached forever. This instead refetches every observation/split for the
+  // meet's current lanes and prunes whatever's no longer in that set, in both IndexedDB and the
+  // signal, then resets the incremental high-water mark so syncLiveData resumes cleanly from here.
+  // Results aren't synced separately — the Results tab computes them client-side from
+  // observations, so this covers both.
+  private async fullResyncLiveData(meetId: string): Promise<void> {
+    const laneIds = this._physicalLanes().map((l) => l.id);
+    const observations = await this.fetchRowsByIds(
+      'observations',
+      'physical_lane_id',
+      laneIds,
+      mapObservation
+    );
+    await this.replaceScopedCache(this.db.observations, this._observations, observations, (o) =>
+      laneIds.includes(o.physicalLaneId)
+    );
+
+    const observationIds = observations.map((o) => o.id);
+    const splits = await this.fetchRowsByIds('splits', 'observation_id', observationIds, mapSplit);
+    await this.replaceScopedCache(this.db.splits, this._splits, splits, (s) =>
+      observationIds.includes(s.observationId)
+    );
+
+    const latest = observations.reduce((max, o) => (o.updatedAt > max ? o.updatedAt : max), EPOCH);
+    await this.updateSyncMeta(meetId, { liveDataSyncedAt: latest });
+  }
+
   // Partial update of a meet's syncMeta row — read-modify-write rather than a raw `put`, since
   // programSyncedAt and liveDataSyncedAt are set independently (syncProgramData vs syncLiveData)
   // and a `put` would silently blow away whichever field isn't part of this call's `changes`.
@@ -597,6 +626,30 @@ export class MeetDataStore {
     const byId = new Map(sig().map((item) => [item.id, item]));
     for (const row of rows) byId.set(row.id, row);
     sig.set([...byId.values()]);
+  }
+
+  // Wholesale replace, scoped: unlike mergeIntoCache, this treats `rows` as the complete server
+  // truth for whatever `belongsToScope` covers (e.g. "this meet's lanes") and prunes local rows in
+  // that scope that no longer exist server-side — mergeIntoCache can only add/update, never notice
+  // a deletion. Used by fullResyncLiveData (hard refresh); the normal incremental sync path doesn't
+  // need this because it never has to reconcile deletions mid-session.
+  private async replaceScopedCache<T extends { id: string }>(
+    dexieTable: {
+      bulkPut: (items: T[]) => Promise<any>;
+      toArray: () => Promise<T[]>;
+      bulkDelete: (ids: string[]) => Promise<any>;
+    },
+    sig: ReturnType<typeof signal<T[]>>,
+    rows: T[],
+    belongsToScope: (item: T) => boolean
+  ): Promise<void> {
+    const freshIds = new Set(rows.map((r) => r.id));
+    const staleIds = (await dexieTable.toArray())
+      .filter((item) => belongsToScope(item) && !freshIds.has(item.id))
+      .map((item) => item.id);
+    if (staleIds.length) await dexieTable.bulkDelete(staleIds);
+    if (rows.length) await dexieTable.bulkPut(rows);
+    sig.set(rows);
   }
 
   private readonly signalByTable: Record<string, ReturnType<typeof signal<any[]>>> = {
