@@ -25,12 +25,7 @@
     <p>No results yet — times will appear here as they're recorded.</p>
   } @else {
     @for (group of groupedStandings(); track group.key) {
-      <h2>{{ group.title }}</h2>
-      <ion-list>
-        @for (standing of group.standings; track standing.teamId; let i = $index) {
-          <app-standing-row [rank]="i + 1" [standing]="standing" />
-        }
-      </ion-list>
+      <app-group-standings-card [group]="group" />
     }
   }
 </ion-content>

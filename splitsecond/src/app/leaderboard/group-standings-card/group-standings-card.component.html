@@ -1,0 +1,15 @@
+<h2>{{ group().title }}</h2>
+<ion-list>
+  @for (standing of pageStandings(); track standing.teamId; let i = $index) {
+    <app-standing-row [rank]="startRank() + i" [standing]="standing" />
+  }
+</ion-list>
+@if (totalPages() > 1) {
+  <div class="pager">
+    <ion-button fill="clear" [disabled]="page() === 0" (click)="previousPage()">Prev</ion-button>
+    <span>Page {{ page() + 1 }} of {{ totalPages() }}</span>
+    <ion-button fill="clear" [disabled]="page() >= totalPages() - 1" (click)="nextPage()">
+      Next
+    </ion-button>
+  </div>
+}
