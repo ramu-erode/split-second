@@ -80,7 +80,7 @@
         @if (lane().splits.length) {
           <div class="splits">
             @for (s of lane().splits; track $index) {
-              <ion-chip color="light">
+              <ion-chip color="danger">
                 <ion-label>{{ formatTime(s) }}</ion-label>
               </ion-chip>
             }

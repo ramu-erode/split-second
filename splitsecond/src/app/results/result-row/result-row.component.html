@@ -22,7 +22,7 @@
   @if (result().splits.length) {
     <div class="splits">
       @for (s of result().splits; track $index) {
-        <ion-chip color="light">
+        <ion-chip color="danger">
           <ion-label>{{ formatTime(s) }}</ion-label>
         </ion-chip>
       }
