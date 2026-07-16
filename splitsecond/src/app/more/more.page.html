@@ -13,6 +13,18 @@
         </ion-label>
       </ion-item>
     }
+    <ion-item button [disabled]="syncing()" (click)="refreshMeetData()">
+      <ion-label>
+        <h2>Refresh meet data</h2>
+        <p>{{ syncing() ? 'Syncing…' : lastSyncedLabel() }}</p>
+        @if (syncError(); as err) {
+          <p>{{ err }}</p>
+        }
+      </ion-label>
+      @if (syncing()) {
+        <ion-spinner slot="end" name="crescent" />
+      }
+    </ion-item>
     <ion-item button (click)="signOut()">
       <ion-label>Sign out</ion-label>
     </ion-item>

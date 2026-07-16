@@ -1,7 +1,7 @@
 import { Injectable, computed, inject, signal } from '@angular/core';
 import { RealtimeChannel } from '@supabase/supabase-js';
 import { SupabaseService } from '../supabase/supabase.service';
-import { LocalDbService } from './local-db.service';
+import { LocalDbService, SyncMeta } from './local-db.service';
 import {
   mapEvent,
   mapMeet,
@@ -49,6 +49,11 @@ function chunk<T>(items: T[], size: number): T[][] {
 
 const SELECTED_MEET_KEY = 'splitsecond:selectedMeetId';
 
+// "Since the beginning of time" — the default cutoff for syncLiveData's incremental fetch when a
+// meet has never been live-synced on this device before, so the same `.gte('updated_at', since)`
+// query shape covers both the first fetch and every incremental one after it.
+const EPOCH = '1970-01-01T00:00:00.000Z';
+
 export type LoadStatus = 'idle' | 'loading' | 'loaded' | 'error';
 
 export interface NewObservation {
@@ -69,6 +74,9 @@ export class MeetDataStore {
 
   private readonly _status = signal<LoadStatus>('idle');
   private readonly _error = signal<string | null>(null);
+  private readonly _syncing = signal(false);
+  private readonly _syncError = signal<string | null>(null);
+  private readonly _lastSyncedAt = signal<string | null>(null);
   private readonly _meet = signal<Meet | null>(null);
   private readonly _availableMeets = signal<Meet[]>([]);
   private readonly _events = signal<Event[]>([]);
@@ -85,6 +93,9 @@ export class MeetDataStore {
 
   readonly status = this._status.asReadonly();
   readonly error = this._error.asReadonly();
+  readonly syncing = this._syncing.asReadonly();
+  readonly syncError = this._syncError.asReadonly();
+  readonly lastSyncedAt = this._lastSyncedAt.asReadonly();
   readonly meet = this._meet.asReadonly();
   readonly availableMeets = this._availableMeets.asReadonly();
   readonly events = this._events.asReadonly();
@@ -204,8 +215,43 @@ export class MeetDataStore {
     if (!meet) return;
     localStorage.setItem(SELECTED_MEET_KEY, meetId);
     await this.loadFromCache(meetId);
-    await this.refreshFromSupabase(meetId);
+
+    const syncMeta = await this.db.syncMeta.get(meetId);
+    this._lastSyncedAt.set(syncMeta?.programSyncedAt ?? null);
+    // No cached program data at all yet (first time this meet's been opened on this device) — a
+    // failure here is a real error, since loadFromCache above had nothing to show either.
+    if (!syncMeta) await this.syncProgramData(meetId);
+    try {
+      await this.syncLiveData(meetId);
+    } catch (e) {
+      // loadFromCache already populated observations/splits locally; a failed catch-up fetch
+      // (e.g. offline on a hard reload) just means slightly stale data until Realtime reconnects
+      // or a hard refresh — not worth blanking the page over (CLAUDE.md invariant #5).
+      console.error('Failed to sync live data from Supabase (using cached observations):', e);
+    }
+
     this.subscribeRealtime(meetId);
+  }
+
+  // Coach-initiated re-fetch of everything for the current meet (More tab "Refresh meet data").
+  // Program data is otherwise only fetched once per meet (see loadMeet) — this is the escape
+  // hatch for catching up on structural changes (combined heats, re-seated lanes) made by a
+  // Scorer while this device was offline or closed. Uses its own syncing/syncError signals
+  // rather than `status`/`error` so a failed refresh doesn't blank a page that already has good
+  // cached data on screen.
+  async hardRefresh(): Promise<void> {
+    const meetId = this._meet()?.id;
+    if (!meetId || this._syncing()) return;
+    this._syncing.set(true);
+    this._syncError.set(null);
+    try {
+      await this.syncProgramData(meetId);
+      await this.syncLiveData(meetId);
+    } catch (e) {
+      this._syncError.set(e instanceof Error ? e.message : 'Refresh failed');
+    } finally {
+      this._syncing.set(false);
+    }
   }
 
   private resolveSelectedMeetId(meets: Meet[]): string | null {
@@ -348,15 +394,34 @@ export class MeetDataStore {
 
   // Coaches can have more than one meet live/published at once (e.g. parallel age-group
   // championships) — every candidate is loaded so selectMeet() can switch between them without a
-  // re-query; resolveSelectedMeetId() picks which one is active by default.
+  // re-query; resolveSelectedMeetId() picks which one is active by default. Falls back to the
+  // locally cached list on failure (e.g. a hard page reload with no connectivity) rather than
+  // failing `load()` outright — a coach who already has this meet's program cached shouldn't see
+  // an error page just because the tiny "which meets exist" query couldn't reach the server.
   private async fetchAvailableMeets(): Promise<Meet[]> {
-    const res = await this.supabase
-      .from('meets')
-      .select('*')
-      .in('status', ['live', 'published'])
-      .order('start_date', { ascending: true });
-    if (res.error) throw new Error(`meets: ${res.error.message}`);
-    return (res.data ?? []).map(mapMeet);
+    try {
+      const res = await this.supabase
+        .from('meets')
+        .select('*')
+        .in('status', ['live', 'published'])
+        .order('start_date', { ascending: true });
+      if (res.error) throw new Error(`meets: ${res.error.message}`);
+      const meets = (res.data ?? []).map(mapMeet);
+      if (meets.length) await this.db.meets.bulkPut(meets);
+      return meets;
+    } catch (e) {
+      const cached = await this.loadCachedMeets();
+      if (cached.length === 0) throw e;
+      console.error('Failed to fetch meets from Supabase (using cached list):', e);
+      return cached;
+    }
+  }
+
+  private async loadCachedMeets(): Promise<Meet[]> {
+    const all = await this.db.meets.toArray();
+    return all
+      .filter((m) => m.status === 'live' || m.status === 'published')
+      .sort((a, b) => (a.startDate ?? '').localeCompare(b.startDate ?? ''));
   }
 
   // IndexedDB now holds every cached meet's rows at once (coaches can switch between two live
@@ -406,7 +471,11 @@ export class MeetDataStore {
     this._pointsRows.set(pointsRows);
   }
 
-  private async refreshFromSupabase(meetId: string): Promise<void> {
+  // The "printed program" + structural state: fetched once per meet (see loadMeet) and again
+  // only on an explicit hardRefresh(), rather than on every load() — this used to run
+  // unconditionally on every load/selectMeet, including a full unscoped refetch of every team and
+  // swimmer across every meet, which was the app's main source of slowness (docs/perf-sync-plan.md).
+  private async syncProgramData(meetId: string): Promise<void> {
     const events = await this.fetchAndCache('events', mapEvent, this.db.events, (q) =>
       q.eq('meet_id', meetId)
     );
@@ -434,7 +503,7 @@ export class MeetDataStore {
       undefined,
       ['physical_heat_id', 'scheduled_heat_id']
     );
-    const physicalLanes = await this.fetchAndCacheByIds(
+    await this.fetchAndCacheByIds(
       'physical_lanes',
       'physical_heat_id',
       physicalHeatIds,
@@ -449,23 +518,85 @@ export class MeetDataStore {
       'place',
     ]);
 
-    const laneIds = physicalLanes.map((l) => l.id);
-    const observations = await this.fetchAndCacheByIds(
+    const syncedAt = new Date().toISOString();
+    await this.updateSyncMeta(meetId, { programSyncedAt: syncedAt });
+    this._lastSyncedAt.set(syncedAt);
+  }
+
+  // The append-only timing data: still fetched on every load()/selectMeet() (unlike
+  // syncProgramData) because it's what catches a device up on observations recorded by other
+  // coaches while this device was closed — bounded to what's actually changed, so it stays cheap.
+  // The Realtime subscription (subscribeRealtime) takes over for the rest of the session.
+  //
+  // Incremental, not a full refetch: observations are append-only (CLAUDE.md invariant #1) and a
+  // retraction only ever bumps that same row's `updated_at` — so a `since` high-water mark per
+  // meet (syncMeta.liveDataSyncedAt) is enough to ask the server for only what changed, merged
+  // into the existing cache/signal rather than replacing it outright (unlike fetchAndCacheByIds,
+  // which assumes its result is the complete set).
+  //
+  // Deliberately NOT scoped by this meet's lane ids: RLS's `observations_select` policy already
+  // grants every signed-in coach read access to every observation regardless of meet (see
+  // supabase/migrations/20260714000002_rls.sql), so chunking by lane id bought no security — only
+  // cost, one request per ~150 lanes even when nothing had changed (a multi-thousand-lane meet
+  // meant 20-60+ requests on every single load just to hear back "nothing new"). Fetching by
+  // `since` alone makes the request count track how much actually changed, not how big the meet's
+  // program is; rows belonging to some other meet are simply filtered out below before merging.
+  //
+  // Splits never change after creation and are always inserted alongside their observation, so
+  // they only need fetching for observation ids that came back in *this round's* delta — no
+  // separate `since` tracking for them, and the id list is small enough that chunking-by-id (via
+  // fetchRowsByIds) is the right call here, unlike for observations above.
+  private async syncLiveData(meetId: string): Promise<void> {
+    const laneIds = new Set(this._physicalLanes().map((l) => l.id));
+    const since = (await this.db.syncMeta.get(meetId))?.liveDataSyncedAt ?? EPOCH;
+
+    const changed = await this.fetchRows(
       'observations',
-      'physical_lane_id',
-      laneIds,
       mapObservation,
-      this.db.observations,
-      (q) => q.eq('deleted', false)
+      (q) => q.gte('updated_at', since),
+      ['updated_at']
     );
+    const observations = changed.filter((o) => laneIds.has(o.physicalLaneId));
+    await this.mergeIntoCache(this.db.observations, this._observations, observations);
+
     const observationIds = observations.map((o) => o.id);
-    await this.fetchAndCacheByIds(
-      'splits',
-      'observation_id',
-      observationIds,
-      mapSplit,
-      this.db.splits
-    );
+    const splits = await this.fetchRowsByIds('splits', 'observation_id', observationIds, mapSplit);
+    await this.mergeIntoCache(this.db.splits, this._splits, splits);
+
+    const latest = changed.reduce((max, o) => (o.updatedAt > max ? o.updatedAt : max), since);
+    if (latest !== since) await this.updateSyncMeta(meetId, { liveDataSyncedAt: latest });
+  }
+
+  // Partial update of a meet's syncMeta row — read-modify-write rather than a raw `put`, since
+  // programSyncedAt and liveDataSyncedAt are set independently (syncProgramData vs syncLiveData)
+  // and a `put` would silently blow away whichever field isn't part of this call's `changes`.
+  private async updateSyncMeta(
+    meetId: string,
+    changes: Partial<Omit<SyncMeta, 'meetId'>>
+  ): Promise<void> {
+    const existing = await this.db.syncMeta.get(meetId);
+    await this.db.syncMeta.put({
+      meetId,
+      programSyncedAt: existing?.programSyncedAt ?? null,
+      liveDataSyncedAt: existing?.liveDataSyncedAt ?? null,
+      ...changes,
+    });
+  }
+
+  // Upserts by id into both IndexedDB and the in-memory signal without discarding whatever the
+  // signal already held (unlike fetchAndCache/fetchAndCacheByIds's `sig.set(rows)`, which replaces
+  // wholesale and is only correct when `rows` is the complete result set) — used by syncLiveData's
+  // incremental fetch, where `rows` is just this round's delta.
+  private async mergeIntoCache<T extends { id: string }>(
+    dexieTable: { bulkPut: (items: T[]) => Promise<any> },
+    sig: ReturnType<typeof signal<T[]>>,
+    rows: T[]
+  ): Promise<void> {
+    if (rows.length === 0) return;
+    await dexieTable.bulkPut(rows);
+    const byId = new Map(sig().map((item) => [item.id, item]));
+    for (const row of rows) byId.set(row.id, row);
+    sig.set([...byId.values()]);
   }
 
   private readonly signalByTable: Record<string, ReturnType<typeof signal<any[]>>> = {
@@ -482,19 +613,16 @@ export class MeetDataStore {
     points_rows: this._pointsRows,
   };
 
-  // teams/swimmers aren't meet-scoped (ADR-7), so this fetches every row across every meet in one
-  // go — with two full meets seeded that's now high enough to hit PostgREST's default row cap
-  // (commonly 1000), which clips silently with no error. .range() pages through in FETCH_PAGE_SIZE
-  // chunks, advancing by however many rows actually came back rather than assuming the request size
-  // was honored — a page smaller than requested could mean "that's everything" or "the server's
+  // The shared paginated-fetch primitive: pages through `filter`'s query in FETCH_PAGE_SIZE chunks,
+  // advancing by however many rows actually came back rather than assuming the request size was
+  // honored — a page smaller than requested could mean "that's everything" or "the server's
   // configured cap is lower than FETCH_PAGE_SIZE," and only an empty page distinguishes "done" from
   // either of those. orderColumns keeps page boundaries stable across requests — defaults to the
-  // synthetic `id` PK every table but points_rows has (its PK is the composite (points_table_id,
-  // place), see the points_rows call site below).
-  private async fetchAndCache<T>(
+  // synthetic `id` PK every table but points_rows/physical_heat_sources have (composite PKs), see
+  // those call sites. No side effects (no Dexie/signal writes) — callers decide replace vs. merge.
+  private async fetchRows<T>(
     table: string,
     mapper: (row: any) => T,
-    dexieTable: { bulkPut: (items: T[]) => Promise<any> },
     filter: (q: any) => any,
     orderColumns: string[] = ['id']
   ): Promise<T[]> {
@@ -510,19 +638,33 @@ export class MeetDataStore {
       rows.push(...page);
       from += page.length;
     }
+    return rows;
+  }
+
+  // teams/swimmers aren't meet-scoped (ADR-7), so this fetches every row across every meet in one
+  // go — with two full meets seeded that's now high enough to hit PostgREST's default row cap
+  // (commonly 1000), which clips silently with no error; fetchRows's pagination handles that.
+  private async fetchAndCache<T>(
+    table: string,
+    mapper: (row: any) => T,
+    dexieTable: { bulkPut: (items: T[]) => Promise<any> },
+    filter: (q: any) => any,
+    orderColumns: string[] = ['id']
+  ): Promise<T[]> {
+    const rows = await this.fetchRows(table, mapper, filter, orderColumns);
     if (rows.length) await dexieTable.bulkPut(rows);
     this.signalByTable[table]?.set(rows);
     return rows;
   }
 
   // Same as fetchAndCache, but for `.in(column, ids)` lookups where `ids` can be large (this meet's
-  // seed data has 700+ physical_lanes). PostgREST serializes `.in()` values into the request URL,
-  // and an unbatched list that size blows past URL-length limits and comes back as a 400 — so this
-  // splits the id list into chunks. But chunking alone isn't enough: a single chunk's *result set*
-  // can still exceed PostgREST's default row cap (e.g. 150 physical_heat_ids at ~7 lanes each is
-  // ~1000+ rows) and get silently truncated the same way an unranged fetchAndCache would — so each
-  // chunk is itself paginated via .range(), same as fetchAndCache. orderColumns defaults to `id`,
-  // but physical_heat_sources has no `id` column (composite PK) — see that call site.
+  // seed data has thousands of physical_lanes). PostgREST serializes `.in()` values into the
+  // request URL, and an unbatched list that size blows past URL-length limits and comes back as a
+  // 400 — so this splits the id list into chunks, one fetchRows call (itself paginated) per chunk.
+  // Only use this for tables genuinely too big to fetch unscoped — see syncLiveData's observations
+  // fetch for why chunking-by-id isn't always the right call: it makes request count scale with
+  // the id list's size (i.e. the meet's total lane count) rather than with how much data actually
+  // matches the filter, which is backwards for a query that's usually filtering down to "what's new".
   private async fetchAndCacheByIds<T>(
     table: string,
     column: string,
@@ -532,27 +674,33 @@ export class MeetDataStore {
     extraFilter?: (q: any) => any,
     orderColumns: string[] = ['id']
   ): Promise<T[]> {
-    if (ids.length === 0) {
-      this.signalByTable[table]?.set([]);
-      return [];
-    }
-    const rows: T[] = [];
-    for (const idsChunk of chunk(ids, ID_CHUNK_SIZE)) {
-      let from = 0;
-      for (;;) {
-        let query = this.supabase.from(table).select('*').in(column, idsChunk);
-        if (extraFilter) query = extraFilter(query);
-        for (const orderColumn of orderColumns) query = query.order(orderColumn, { ascending: true });
-        const res = await query.range(from, from + FETCH_PAGE_SIZE - 1);
-        if (res.error) throw new Error(`${table}: ${res.error.message}`);
-        const page: T[] = (res.data ?? []).map(mapper);
-        if (page.length === 0) break;
-        rows.push(...page);
-        from += page.length;
-      }
-    }
+    const rows = await this.fetchRowsByIds(table, column, ids, mapper, extraFilter, orderColumns);
     if (rows.length) await dexieTable.bulkPut(rows);
     this.signalByTable[table]?.set(rows);
+    return rows;
+  }
+
+  // The chunked/paginated `.in(column, ids)` fetch itself, without fetchAndCacheByIds's "replace
+  // the whole signal" side effect.
+  private async fetchRowsByIds<T>(
+    table: string,
+    column: string,
+    ids: string[],
+    mapper: (row: any) => T,
+    extraFilter?: (q: any) => any,
+    orderColumns: string[] = ['id']
+  ): Promise<T[]> {
+    if (ids.length === 0) return [];
+    const rows: T[] = [];
+    for (const idsChunk of chunk(ids, ID_CHUNK_SIZE)) {
+      const page = await this.fetchRows(
+        table,
+        mapper,
+        (q) => (extraFilter ? extraFilter(q.in(column, idsChunk)) : q.in(column, idsChunk)),
+        orderColumns
+      );
+      rows.push(...page);
+    }
     return rows;
   }
 
