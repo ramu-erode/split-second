@@ -37,4 +37,16 @@
       <ion-select-option [value]="gender">{{ gender }}</ion-select-option>
     }
   </ion-select>
+
+  <ion-select
+    label="Event"
+    placeholder="Select event"
+    interface="popover"
+    [value]="selectedEventId()"
+    (ionChange)="eventIdChanged.emit($event.detail.value)"
+  >
+    @for (event of events(); track event.id) {
+      <ion-select-option [value]="event.id">{{ event.title }}</ion-select-option>
+    }
+  </ion-select>
 </div>

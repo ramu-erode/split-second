@@ -28,19 +28,21 @@
       [teams]="teamOptions()"
       [ageGroups]="ageGroupOptions()"
       [genders]="genderOptions()"
+      [events]="eventOptions()"
       [selectedTeamId]="selectedTeamId()"
       [selectedAgeGroup]="selectedAgeGroup()"
       [selectedGender]="selectedGender()"
+      [selectedEventId]="displayedEvent()?.eventId ?? null"
       (teamIdChanged)="selectedTeamId.set($event)"
       (ageGroupChanged)="selectedAgeGroup.set($event)"
       (genderChanged)="selectedGender.set($event)"
+      (eventIdChanged)="selectedEventId.set($event)"
     />
 
-    @if (filteredEvents().length === 0) {
-      <p>No completed results yet for this filter.</p>
-    }
-    @for (event of filteredEvents(); track event.eventId) {
+    @if (displayedEvent(); as event) {
       <app-event-results-card [event]="event" />
+    } @else {
+      <p>No completed results yet for this filter.</p>
     }
   }
 </ion-content>

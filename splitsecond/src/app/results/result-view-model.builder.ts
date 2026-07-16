@@ -54,9 +54,27 @@ export function buildEventResults(
       isRelay: event.isRelay,
       isProvisional: scoring.isProvisional,
       results,
+      firstCompletedAt: resolveFirstCompletedAt(lanes, observationsByLaneId),
     });
   }
   return out.sort((a, b) => a.eventNo - b.eventNo);
+}
+
+// The earliest `createdAt` among this event's timed observations — i.e. the moment the event
+// first had "at least one swimmer's time recorded". Only called once `computeEventScoring` has
+// already confirmed at least one lane resolved to a time, so an observation always exists here.
+function resolveFirstCompletedAt(
+  lanes: PhysicalLane[],
+  observationsByLaneId: Map<string, Observation[]>
+): string {
+  let earliest: string | null = null;
+  for (const lane of lanes) {
+    for (const obs of observationsByLaneId.get(lane.id) ?? []) {
+      if (obs.finalTimeMs == null) continue;
+      if (earliest == null || obs.createdAt < earliest) earliest = obs.createdAt;
+    }
+  }
+  return earliest as string;
 }
 
 function toResultViewModel(

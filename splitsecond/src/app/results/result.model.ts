@@ -21,9 +21,17 @@ export interface EventResultsViewModel {
   isRelay: boolean;
   isProvisional: boolean;
   results: ResultViewModel[];
+  // When this event first had at least one swimmer's time recorded — drives the Results event
+  // dropdown's default selection (most recently completed event), not display order.
+  firstCompletedAt: string;
 }
 
 export interface TeamOption {
   id: string;
   name: string;
+}
+
+export interface EventOption {
+  id: string;
+  title: string;
 }
