@@ -71,6 +71,7 @@ export function filterHeatViewModels(
   if (!q) return heats;
   return heats.filter(
     (h) =>
+      String(h.eventNo) === q ||
       h.eventTitle.toLowerCase().includes(q) ||
       h.lanes.some(
         (l) => l.swimmerName?.toLowerCase().includes(q) || l.teamName?.toLowerCase().includes(q)
