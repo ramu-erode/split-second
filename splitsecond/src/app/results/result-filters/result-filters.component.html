@@ -41,7 +41,8 @@
   <ion-select
     label="Event"
     placeholder="Select event"
-    interface="popover"
+    interface="modal"
+    [interfaceOptions]="{ header: 'Select event', initialBreakpoint: 0.75, breakpoints: [0, 0.75, 1] }"
     [value]="selectedEventId()"
     (ionChange)="eventIdChanged.emit($event.detail.value)"
   >
